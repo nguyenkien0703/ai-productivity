@@ -10,7 +10,7 @@ import { calculateSummary } from './utils/calculations';
 
 // Pivot date: July 1, 2025 (join date)
 const PIVOT_DATE = new Date(import.meta.env.VITE_JOIN_DATE || '2025-07-01');
-const HOURLY_RATE = 50; // Default hourly rate for cost calculations
+const HOURLY_RATE = 10; // Default hourly rate for cost calculations
 
 function App() {
   const [loading, setLoading] = useState(true);

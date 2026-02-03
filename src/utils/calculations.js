@@ -97,7 +97,7 @@ export function formatCurrency(amount, currency = 'USD') {
  * @param {number} hourlyRate - Optional hourly rate for cost calculations
  * @returns {Object} - Comprehensive summary
  */
-export function calculateSummary(prStats, sprintStats, hourlyRate = 50) {
+export function calculateSummary(prStats, sprintStats, hourlyRate = 10) {
   const prCountImprovement = calculateImprovement(
     prStats.prCountBefore,
     prStats.prCountAfter

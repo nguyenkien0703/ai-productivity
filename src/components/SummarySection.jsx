@@ -3,7 +3,7 @@ import { formatHours, formatCurrency, formatPercentage } from '../utils/calculat
 /**
  * Summary section showing overall improvements and savings
  */
-export default function SummarySection({ summary, prStats, sprintStats, hourlyRate = 50 }) {
+export default function SummarySection({ summary, prStats, sprintStats, hourlyRate = 10 }) {
   const { improvements, timeSaved, costSavings } = summary;
 
   // Calculate AI productivity metrics
@@ -13,8 +13,9 @@ export default function SummarySection({ summary, prStats, sprintStats, hourlyRa
 
   // Estimate time saved per PR with AI (assume 2 hours saved per PR)
   const estimatedHoursSavedPerPR = 2;
-  const totalPRsAfter = prStats?.prCountAfter || 0;
-  const estimatedTotalHoursSaved = totalPRsAfter * estimatedHoursSavedPerPR;
+  // Use PR INCREASE (difference), not total PRs after
+  const prIncreaseCount = (prStats?.prCountAfter || 0) - (prStats?.prCountBefore || 0);
+  const estimatedTotalHoursSaved = prIncreaseCount * estimatedHoursSavedPerPR;
   const estimatedCostSavings = estimatedTotalHoursSaved * hourlyRate;
 
   // Time saved percentage (based on PR throughput increase)
@@ -249,7 +250,7 @@ export default function SummarySection({ summary, prStats, sprintStats, hourlyRa
         <strong>💡 Key Insight:</strong> Với AI assistance, team đã tăng output lên{' '}
         <strong>{(prIncrease / 100 + 1).toFixed(1)}x</strong> so với trước, tiết kiệm ước tính{' '}
         <strong>{formatCurrency(estimatedCostSavings)}</strong> chi phí nhân lực
-        (dựa trên {estimatedHoursSavedPerPR}h tiết kiệm/PR × {totalPRsAfter} PRs × {formatCurrency(hourlyRate)}/hr).
+        (dựa trên {estimatedHoursSavedPerPR}h tiết kiệm/PR × {prIncreaseCount} PRs tăng thêm × {formatCurrency(hourlyRate)}/hr).
       </div>
     </div>
   );
