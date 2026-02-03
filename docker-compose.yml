@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    container_name: ai-productivity-dashboard
+    ports:
+      - "3003:3003"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+    restart: unless-stopped
