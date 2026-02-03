@@ -7,7 +7,7 @@ Bạn có thể sử dụng các lệnh bên dưới để tự verify số li�
 
 ## Yêu cầu trước khi chạy commands
 
-1. **Server phải đang chạy** trên `localhost:3003`
+1. **Server phải đang chạy** trên `localhost:3004`
    ```bash
    npm run dev
    ```
@@ -38,7 +38,7 @@ Bạn có thể sử dụng các lệnh bên dưới để tự verify số li�
 
 ### 1.1 Giải thích về Proxy Server
 
-Dashboard sử dụng **proxy server** (`server.js` chạy trên port 3003) để gọi GitHub API.
+Dashboard sử dụng **proxy server** (`server.js` chạy trên port 3004) để gọi GitHub API.
 
 **Tại sao cần proxy?**
 - GitHub token được lưu trong `.env` trên server
@@ -47,14 +47,14 @@ Dashboard sử dụng **proxy server** (`server.js` chạy trên port 3003) đ�
 
 **Flow khi gọi API:**
 ```
-Terminal/Browser → localhost:3003/api/github/... → api.github.com → Response
+Terminal/Browser → localhost:3004/api/github/... → api.github.com → Response
 ```
 
 ### 1.2 Cách lấy dữ liệu PR
 
 **Command:**
 ```bash
-curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=1"
+curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=1"
 ```
 
 **Giải thích từng phần:**
@@ -62,7 +62,7 @@ curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?st
 | Phần | Ý nghĩa |
 |------|---------|
 | `curl -s` | Gọi HTTP GET request. `-s` = silent (không hiện progress bar) |
-| `http://localhost:3003` | Địa chỉ proxy server đang chạy |
+| `http://localhost:3004` | Địa chỉ proxy server đang chạy |
 | `/api/github/` | Prefix để proxy biết forward đến GitHub API |
 | `repos/DefikitTeam/lumilink-be/pulls` | GitHub API endpoint: lấy danh sách PRs của repo |
 | `?state=all` | Lấy TẤT CẢ PRs (bao gồm open, closed, merged) |
@@ -79,7 +79,7 @@ curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?st
 ```bash
 # Loop qua từng page, đếm số PRs, dừng khi page rỗng
 for i in {1..10}; do
-  count=$(curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=$i" | jq 'length')
+  count=$(curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=$i" | jq 'length')
   echo "Page $i: $count PRs"
   if [ "$count" -eq 0 ]; then break; fi
 done
@@ -93,7 +93,7 @@ done
 **Command cho lumilink-fe:**
 ```bash
 for i in {1..10}; do
-  count=$(curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-fe/pulls?state=all&per_page=100&page=$i" | jq 'length')
+  count=$(curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-fe/pulls?state=all&per_page=100&page=$i" | jq 'length')
   echo "Page $i: $count PRs"
   if [ "$count" -eq 0 ]; then break; fi
 done
@@ -118,7 +118,7 @@ done
 **Command đếm PRs BEFORE 01/07/2025:**
 ```bash
 # Đếm PRs có created_at < "2025-07-01" trong page cuối (page có PRs cũ nhất)
-curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=6" | \
+curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=6" | \
   jq '[.[] | select(.created_at < "2025-07-01")] | length'
 ```
 
@@ -129,7 +129,7 @@ curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?st
 **Command đếm PRs AFTER 01/07/2025:**
 ```bash
 # Đếm PRs có created_at >= "2025-07-01" trong page 1 (page có PRs mới nhất)
-curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=1" | \
+curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=1" | \
   jq '[.[] | select(.created_at >= "2025-07-01")] | length'
 ```
 
@@ -182,7 +182,7 @@ Output Multiplier = PRs After / PRs Before
 **Command:**
 ```bash
 # Xem thông tin 1 PR đầu tiên
-curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=1" | \
+curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=1" | \
   jq '.[0] | {number, title, state, created_at, merged_at, user: .user.login}'
 ```
 
@@ -207,7 +207,7 @@ curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?st
 **Command:**
 ```bash
 # Đếm PRs có merged_at != null (đã được merge)
-curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=1" | \
+curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=1" | \
   jq '[.[] | select(.merged_at != null)] | length'
 ```
 
@@ -225,14 +225,14 @@ Tương tự GitHub, Jira API cũng đi qua proxy server với authentication.
 
 **Flow:**
 ```
-Terminal → localhost:3003/api/jira/... → jira.savameta.com → Response
+Terminal → localhost:3004/api/jira/... → jira.savameta.com → Response
 ```
 
 ### 2.2 Lấy danh sách Boards
 
 **Command:**
 ```bash
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board?projectKeyOrId=AAP" | jq
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/board?projectKeyOrId=AAP" | jq
 ```
 
 **Giải thích:**
@@ -259,7 +259,7 @@ curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board?projectKeyOrId=AAP"
 **Command:**
 ```bash
 # Thay 123 bằng Board ID thực tế từ bước 2.2
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board/123/sprint?state=closed" | jq
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/board/123/sprint?state=closed" | jq
 ```
 
 **Giải thích:**
@@ -286,7 +286,7 @@ curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board/123/sprint?state=cl
 **Command:**
 ```bash
 # Thay 456 bằng Sprint ID thực tế từ bước 2.3
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/sprint/456/issue?fields=status,customfield_10016" | jq
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/sprint/456/issue?fields=status,customfield_10016" | jq
 ```
 
 **Giải thích:**
@@ -344,27 +344,27 @@ Total Story Points = Tổng tất cả completed story points từ 14 sprints sa
 
 **Bước 1: Lấy Board ID**
 ```bash
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board?projectKeyOrId=AAP" | jq '.values[0].id'
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/board?projectKeyOrId=AAP" | jq '.values[0].id'
 # Ghi lại Board ID (ví dụ: 15)
 ```
 
 **Bước 2: Lấy danh sách Sprints**
 ```bash
 # Thay 15 bằng Board ID thực tế
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board/15/sprint?state=closed,active" | \
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/board/15/sprint?state=closed,active" | \
   jq '.values | length'
 # Output: Số lượng sprints
 ```
 
 **Bước 3: Xem chi tiết sprints (với endDate)**
 ```bash
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board/15/sprint?state=closed,active" | \
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/board/15/sprint?state=closed,active" | \
   jq '.values[] | {id, name, endDate, state}'
 ```
 
 **Bước 4: Đếm sprints sau 01/07/2025**
 ```bash
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board/15/sprint?state=closed,active" | \
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/board/15/sprint?state=closed,active" | \
   jq '[.values[] | select(.endDate >= "2025-07-01")] | length'
 # Kết quả phải = 14
 ```
@@ -372,7 +372,7 @@ curl -s "http://localhost:3003/api/jira/rest/agile/1.0/board/15/sprint?state=clo
 **Bước 5: Lấy issues trong 1 sprint và tính story points**
 ```bash
 # Thay 456 bằng Sprint ID
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/sprint/456/issue?maxResults=1000" | \
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/sprint/456/issue?maxResults=1000" | \
   jq '[.issues[] | {
     key: .key,
     status: .fields.status.statusCategory.key,
@@ -383,7 +383,7 @@ curl -s "http://localhost:3003/api/jira/rest/agile/1.0/sprint/456/issue?maxResul
 **Bước 6: Tính completion rate của 1 sprint**
 ```bash
 # Lấy issues của sprint
-curl -s "http://localhost:3003/api/jira/rest/agile/1.0/sprint/456/issue?maxResults=1000" | \
+curl -s "http://localhost:3004/api/jira/rest/agile/1.0/sprint/456/issue?maxResults=1000" | \
   jq '{
     total: [.issues[].fields | (.customfield_10031 // .customfield_10016 // 0)] | add,
     completed: [.issues[] | select(.fields.status.statusCategory.key == "done") | .fields | (.customfield_10031 // .customfield_10016 // 0)] | add
@@ -503,16 +503,16 @@ Cost Savings = Hours Saved × Hourly Rate
 
 ```bash
 # 1. Kiểm tra server đang chạy
-curl -s "http://localhost:3003/api/health" | jq
+curl -s "http://localhost:3004/api/health" | jq
 
 # 2. Đếm tổng PRs lumilink-be (chạy 1 dòng)
-total=0; for i in {1..10}; do c=$(curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=$i" | jq 'length'); [ "$c" -eq 0 ] && break; total=$((total+c)); done; echo "lumilink-be: $total PRs"
+total=0; for i in {1..10}; do c=$(curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=100&page=$i" | jq 'length'); [ "$c" -eq 0 ] && break; total=$((total+c)); done; echo "lumilink-be: $total PRs"
 
 # 3. Đếm tổng PRs lumilink-fe (chạy 1 dòng)
-total=0; for i in {1..10}; do c=$(curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-fe/pulls?state=all&per_page=100&page=$i" | jq 'length'); [ "$c" -eq 0 ] && break; total=$((total+c)); done; echo "lumilink-fe: $total PRs"
+total=0; for i in {1..10}; do c=$(curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-fe/pulls?state=all&per_page=100&page=$i" | jq 'length'); [ "$c" -eq 0 ] && break; total=$((total+c)); done; echo "lumilink-fe: $total PRs"
 
 # 4. Xem sample PR data
-curl -s "http://localhost:3003/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=1" | jq '.[0] | {number, title, created_at, merged_at}'
+curl -s "http://localhost:3004/api/github/repos/DefikitTeam/lumilink-be/pulls?state=all&per_page=1" | jq '.[0] | {number, title, created_at, merged_at}'
 ```
 
 ---
