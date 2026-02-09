@@ -2,6 +2,10 @@
 const API_BASE = '/api/jira';
 const PROJECT_KEY = import.meta.env.VITE_JIRA_PROJECT_KEY || 'AAP';
 
+// Re-export shared calculation functions
+export { calculateSprintMetrics, calculateSprintStats } from '../../shared/jira-calculations.js';
+import { calculateSprintMetrics } from '../../shared/jira-calculations.js';
+
 /**
  * Fetch data from Jira API via proxy
  * @param {string} endpoint - API endpoint
@@ -80,41 +84,6 @@ export async function getSprintReport(boardId, sprintId) {
 }
 
 /**
- * Calculate sprint metrics
- * @param {Array} issues - Sprint issues
- * @returns {Object} - Sprint metrics
- */
-export function calculateSprintMetrics(issues) {
-  let committedPoints = 0;
-  let completedPoints = 0;
-
-  issues.forEach((issue) => {
-    // Story Points field for this Jira instance
-    const storyPoints = issue.fields?.customfield_10031 || // Story Points
-                       issue.fields?.customfield_10016 ||  // Story point estimate
-                       issue.fields?.customfield_10100 ||  // Original story points
-                       0;
-
-    committedPoints += Number(storyPoints) || 0;
-
-    // Check if issue is done
-    const status = issue.fields?.status?.statusCategory?.key;
-    if (status === 'done') {
-      completedPoints += Number(storyPoints) || 0;
-    }
-  });
-
-  const completionRate = committedPoints > 0 ? (completedPoints / committedPoints) * 100 : 0;
-
-  return {
-    committedPoints,
-    completedPoints,
-    completionRate,
-    issueCount: issues.length,
-  };
-}
-
-/**
  * Fetch all sprint data for the project
  * @returns {Promise<Array>} - Array of sprint data with metrics
  */
@@ -150,54 +119,10 @@ export async function fetchAllSprintData() {
   );
 }
 
-/**
- * Get sprint statistics before and after a date
- * @param {Array} sprints - Array of sprint data
- * @param {Date} pivotDate - Date to split before/after
- * @returns {Object} - Statistics object
- */
-export function calculateSprintStats(sprints, pivotDate) {
-  const before = sprints.filter((s) => new Date(s.endDate || s.completeDate) < pivotDate);
-  const after = sprints.filter((s) => new Date(s.endDate || s.completeDate) >= pivotDate);
-
-  const avgCompletionBefore =
-    before.length > 0
-      ? before.reduce((sum, s) => sum + s.completionRate, 0) / before.length
-      : 0;
-
-  const avgCompletionAfter =
-    after.length > 0
-      ? after.reduce((sum, s) => sum + s.completionRate, 0) / after.length
-      : 0;
-
-  const avgPointsBefore =
-    before.length > 0
-      ? before.reduce((sum, s) => sum + s.completedPoints, 0) / before.length
-      : 0;
-
-  const avgPointsAfter =
-    after.length > 0
-      ? after.reduce((sum, s) => sum + s.completedPoints, 0) / after.length
-      : 0;
-
-  return {
-    sprintCountBefore: before.length,
-    sprintCountAfter: after.length,
-    avgCompletionBefore,
-    avgCompletionAfter,
-    avgPointsBefore,
-    avgPointsAfter,
-    totalPointsBefore: before.reduce((sum, s) => sum + s.completedPoints, 0),
-    totalPointsAfter: after.reduce((sum, s) => sum + s.completedPoints, 0),
-  };
-}
-
 export default {
   getBoards,
   getSprints,
   getSprintIssues,
   getSprintReport,
   fetchAllSprintData,
-  calculateSprintMetrics,
-  calculateSprintStats,
 };

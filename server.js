@@ -5,6 +5,8 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
+import { initializeDatabase, closeDatabase } from './server/db.js';
+import dashboardRouter from './server/routes/dashboard.js';
 
 config();
 
@@ -22,6 +24,12 @@ const GITHUB_TOKEN = process.env.VITE_GITHUB_TOKEN;
 const JIRA_BASE_URL = process.env.VITE_JIRA_BASE_URL;
 const JIRA_EMAIL = process.env.VITE_JIRA_EMAIL;
 const JIRA_API_TOKEN = process.env.VITE_JIRA_API_TOKEN;
+
+// Initialize database
+initializeDatabase();
+
+// Dashboard API routes (cached data)
+app.use('/api/dashboard', dashboardRouter);
 
 // GitHub API Proxy
 app.get(/^\/api\/github\/(.*)$/, async (req, res) => {
@@ -84,7 +92,7 @@ if (existsSync(distPath)) {
   });
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n🚀 Server running on http://localhost:${PORT}`);
   console.log('\n📊 Configuration:');
   console.log('   GitHub Token:', GITHUB_TOKEN ? '✓ configured' : '✗ missing');
@@ -98,3 +106,16 @@ app.listen(PORT, () => {
     console.log('\n⚠️  Development mode: Run "npm run dev" for frontend');
   }
 });
+
+// Graceful shutdown
+function shutdown() {
+  console.log('\n🔒 Shutting down gracefully...');
+  closeDatabase();
+  server.close(() => {
+    console.log('   Server closed');
+    process.exit(0);
+  });
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

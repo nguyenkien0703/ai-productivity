@@ -8,3 +8,5 @@ dist
 deploy
 README.md
 .DS_Store
+data/
+*.db

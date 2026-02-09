@@ -23,6 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Database
+data/
+*.db
+
 # Environment variables
 .env
 .env.local

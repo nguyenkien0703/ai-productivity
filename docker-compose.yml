@@ -9,4 +9,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3004
+    volumes:
+      - dashboard-data:/app/data
     restart: unless-stopped
+
+volumes:
+  dashboard-data:
