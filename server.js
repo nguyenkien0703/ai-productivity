@@ -28,6 +28,9 @@ const JIRA_PROJECT_KEY = process.env.VITE_JIRA_PROJECT_KEY || 'AAP';
 const GITHUB_REPOS = [
   { owner: 'DefikitTeam', repo: 'lumilink-be' },
   { owner: 'DefikitTeam', repo: 'lumilink-fe' },
+  { owner: 'DefikitTeam', repo: 'claude-code-container' },
+  { owner: 'DefikitTeam', repo: 'lumibrand-be' },
+  { owner: 'DefikitTeam', repo: 'lumilink-product' },
 ];
 
 // ========== Data Fetching & Caching ==========
@@ -62,6 +65,46 @@ async function fetchGitHubRepoPRs(owner, repo) {
 }
 
 /**
+ * Fetch all commits from a single GitHub repo (paginated)
+ */
+async function fetchGitHubRepoCommits(owner, repo, since = null) {
+  const commits = [];
+  let page = 1;
+  const perPage = 100;
+  const maxPages = 50; // Limit to 5000 commits per repo (increased from 30)
+
+  const params = { per_page: perPage, page };
+  if (since) params.since = since;
+
+  while (page <= maxPages) {
+    try {
+      const response = await axios.get(
+        `https://api.github.com/repos/${owner}/${repo}/commits`,
+        {
+          headers: {
+            Authorization: `token ${GITHUB_TOKEN}`,
+            Accept: 'application/vnd.github.v3+json',
+          },
+          params,
+          timeout: 10000, // 10 second timeout per request
+        }
+      );
+
+      if (response.data.length === 0) break;
+      commits.push(...response.data);
+      if (response.data.length < perPage) break;
+      page++;
+      params.page = page;
+    } catch (error) {
+      console.error(`      Error fetching page ${page} from ${owner}/${repo}:`, error.message);
+      break; // Stop on error but return what we have
+    }
+  }
+
+  return commits.map((c) => ({ ...c, repoName: `${owner}/${repo}` }));
+}
+
+/**
  * Fetch all GitHub PRs from all repos and cache to DB
  */
 async function fetchAndCacheGitHubData() {
@@ -73,6 +116,278 @@ async function fetchAndCacheGitHubData() {
   await setCachedData('github_prs', allPRs);
   console.log(`  GitHub: cached ${allPRs.length} PRs`);
   return allPRs;
+}
+
+/**
+ * Fetch all GitHub commits from all repos and cache to DB
+ */
+async function fetchAndCacheGitHubCommits() {
+  const allCommits = [];
+  try {
+    for (const { owner, repo } of GITHUB_REPOS) {
+      console.log(`  Fetching commits from ${owner}/${repo}...`);
+      const commits = await fetchGitHubRepoCommits(owner, repo);
+      console.log(`    → Got ${commits.length} commits from ${owner}/${repo}`);
+      allCommits.push(...commits);
+    }
+    await setCachedData('github_commits', allCommits);
+    console.log(`  GitHub: cached ${allCommits.length} commits total`);
+    return allCommits;
+  } catch (error) {
+    console.error('  GitHub commits fetch error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Helper: Count unique active days from commits (GMT+7)
+ */
+function countActiveDays(commits) {
+  const uniqueDays = new Set(
+    commits.map((c) => toGMT7DateString(c.commit.author.date))
+  );
+  return uniqueDays.size;
+}
+
+/**
+ * Helper: Calculate current streak (GMT+7)
+ */
+function calculateStreak(commits) {
+  if (commits.length === 0) return 0;
+
+  const dates = [...new Set(commits.map((c) =>
+    toGMT7DateString(c.commit.author.date)
+  ))].sort().reverse();
+
+  let streak = 0;
+  const todayGMT7 = toGMT7DateString(new Date());
+  let currentDate = new Date(todayGMT7);
+
+  for (const dateStr of dates) {
+    const commitDate = new Date(dateStr);
+    const diffDays = Math.floor((currentDate - commitDate) / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 1) {
+      streak++;
+      currentDate = commitDate;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+/**
+ * Helper: Calculate commits per day
+ */
+function calculateCommitsPerDay(commits) {
+  const activeDays = countActiveDays(commits);
+  return activeDays > 0 ? commits.length / activeDays : 0;
+}
+
+/**
+ * Helper: Calculate average merge time
+ */
+function calculateAvgMergeTime(prs) {
+  const merged = prs.filter((pr) => pr.merged_at);
+  if (merged.length === 0) return 0;
+
+  const mergeTimes = merged.map((pr) =>
+    (new Date(pr.merged_at) - new Date(pr.created_at)) / (1000 * 60 * 60)
+  );
+
+  return mergeTimes.reduce((a, b) => a + b, 0) / mergeTimes.length;
+}
+
+/**
+ * Helper: Group commits by repo
+ */
+function groupByRepo(commits) {
+  const repoMap = {};
+  commits.forEach((c) => {
+    const repo = c.repoName;
+    repoMap[repo] = (repoMap[repo] || 0) + 1;
+  });
+
+  return Object.entries(repoMap)
+    .map(([repo, count]) => ({ repo, commits: count }))
+    .sort((a, b) => b.commits - a.commits);
+}
+
+/**
+ * Helper: Analyze working pattern (GMT+7)
+ */
+function analyzeWorkingPattern(commits) {
+  const dayCount = [0, 0, 0, 0, 0, 0, 0];
+  const hourCount = Array(24).fill(0);
+
+  commits.forEach((c) => {
+    const utcDate = new Date(c.commit.author.date);
+    // Convert to GMT+7
+    const gmt7Date = new Date(utcDate.getTime() + (7 * 60 * 60 * 1000));
+    dayCount[gmt7Date.getUTCDay()]++;
+    hourCount[gmt7Date.getUTCHours()]++;
+  });
+
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const mostActiveDayIndex = dayCount.indexOf(Math.max(...dayCount));
+  const mostActiveHour = hourCount.indexOf(Math.max(...hourCount));
+
+  return {
+    mostActiveDay: days[mostActiveDayIndex],
+    mostActiveHour: `${mostActiveHour}:00`,
+    dayDistribution: dayCount,
+    hourDistribution: hourCount,
+  };
+}
+
+/**
+ * Helper: Convert UTC date to GMT+7 date string
+ */
+function toGMT7DateString(utcDate) {
+  const date = new Date(utcDate);
+  // Add 7 hours for GMT+7
+  date.setHours(date.getHours() + 7);
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Helper: Generate heatmap data with commit details (GMT+7 timezone)
+ */
+function generateHeatmapData(commits) {
+  const heatmap = {};
+  const commitsByDate = {};
+
+  // Get date range based on commits
+  const today = new Date();
+  const oneYearAgo = new Date(today);
+  oneYearAgo.setFullYear(today.getFullYear() - 2); // Go back 2 years for full data
+
+  // Initialize all dates in GMT+7
+  for (let d = new Date(oneYearAgo); d <= today; d.setDate(d.getDate() + 1)) {
+    const dateStr = toGMT7DateString(d);
+    if (!heatmap[dateStr]) {
+      heatmap[dateStr] = 0;
+      commitsByDate[dateStr] = {};
+    }
+  }
+
+  // Process commits with GMT+7 timezone
+  commits.forEach((c) => {
+    const dateStr = toGMT7DateString(c.commit.author.date);
+
+    if (!heatmap[dateStr]) {
+      heatmap[dateStr] = 0;
+      commitsByDate[dateStr] = {};
+    }
+
+    heatmap[dateStr]++;
+
+    // Group commits by repo for each date
+    const repo = c.repoName;
+    if (!commitsByDate[dateStr][repo]) {
+      commitsByDate[dateStr][repo] = [];
+    }
+    commitsByDate[dateStr][repo].push({
+      sha: c.sha,
+      message: c.commit.message,
+      url: c.html_url,
+    });
+  });
+
+  return { heatmap, commitsByDate };
+}
+
+/**
+ * Calculate member statistics
+ */
+function calculateMemberStats(commits, prs, pivotDate) {
+  const memberMap = new Map();
+
+  commits.forEach((commit) => {
+    const username = commit.author?.login ||
+                     commit.commit.author.email.split('@')[0];
+
+    if (!memberMap.has(username)) {
+      memberMap.set(username, {
+        username,
+        displayName: commit.author?.login || commit.commit.author.name,
+        avatar: commit.author?.avatar_url || null,
+        commits: [],
+        prs: [],
+      });
+    }
+
+    memberMap.get(username).commits.push(commit);
+  });
+
+  prs.forEach((pr) => {
+    const username = pr.user.login;
+
+    if (!memberMap.has(username)) {
+      memberMap.set(username, {
+        username,
+        displayName: pr.user.login,
+        avatar: pr.user.avatar_url,
+        commits: [],
+        prs: [],
+      });
+    }
+
+    memberMap.get(username).prs.push(pr);
+  });
+
+  const members = Array.from(memberMap.values()).map((member) => {
+    const commitsBefore = member.commits.filter((c) =>
+      new Date(c.commit.author.date) < pivotDate
+    );
+    const commitsAfter = member.commits.filter((c) =>
+      new Date(c.commit.author.date) >= pivotDate
+    );
+
+    const prsBefore = member.prs.filter((pr) =>
+      new Date(pr.created_at) < pivotDate
+    );
+    const prsAfter = member.prs.filter((pr) =>
+      new Date(pr.created_at) >= pivotDate
+    );
+
+    const { heatmap, commitsByDate } = generateHeatmapData(member.commits);
+
+    return {
+      username: member.username,
+      displayName: member.displayName,
+      avatar: member.avatar,
+      metrics: {
+        commitFrequency: {
+          total: member.commits.length,
+          before: commitsBefore.length,
+          after: commitsAfter.length,
+          activeDays: countActiveDays(member.commits),
+          currentStreak: calculateStreak(member.commits),
+          commitsPerDay: calculateCommitsPerDay(commitsAfter),
+        },
+        prMetrics: {
+          created: member.prs.length,
+          merged: member.prs.filter((pr) => pr.merged_at).length,
+          mergeRate: member.prs.length > 0
+            ? member.prs.filter((pr) => pr.merged_at).length / member.prs.length
+            : 0,
+          avgMergeTimeHours: calculateAvgMergeTime(member.prs),
+        },
+        repoActivity: groupByRepo(member.commits),
+        workingPattern: analyzeWorkingPattern(member.commits),
+      },
+      heatmapData: heatmap,
+      commitsByDate: commitsByDate,
+    };
+  });
+
+  return members.filter((m) =>
+    !m.username.includes('bot') &&
+    !m.username.includes('[bot]')
+  );
 }
 
 /**
@@ -157,13 +472,40 @@ async function syncAllData() {
   const errors = [];
 
   let githubPRs = [];
+  let githubCommits = [];
+  let memberStats = null;
   let jiraSprints = [];
 
   try {
     githubPRs = await fetchAndCacheGitHubData();
   } catch (err) {
-    console.error('GitHub sync error:', err.message);
-    errors.push({ source: 'github', message: err.message });
+    console.error('GitHub PRs sync error:', err.message);
+    errors.push({ source: 'github_prs', message: err.message });
+  }
+
+  try {
+    console.log('Fetching GitHub commits...');
+    githubCommits = await fetchAndCacheGitHubCommits();
+  } catch (err) {
+    console.error('GitHub commits sync error:', err.message);
+    errors.push({ source: 'github_commits', message: err.message });
+    githubCommits = []; // Continue with empty commits
+  }
+
+  try {
+    if (githubCommits.length > 0 && githubPRs.length > 0) {
+      console.log('Calculating member stats...');
+      memberStats = calculateMemberStats(githubCommits, githubPRs, new Date('2025-07-01'));
+      await setCachedData('member_stats', memberStats);
+      console.log(`  Members: calculated stats for ${memberStats.length} members`);
+    } else {
+      console.log('  Skipping member stats (no commits or PRs available)');
+      memberStats = [];
+    }
+  } catch (err) {
+    console.error('Member stats calculation error:', err.message);
+    errors.push({ source: 'member_stats', message: err.message });
+    memberStats = []; // Continue with empty stats
   }
 
   try {
@@ -177,7 +519,7 @@ async function syncAllData() {
   await updateSyncMeta(status, errors);
   console.log(`Sync complete: ${status}`);
 
-  return { githubPRs, jiraSprints, status, errors };
+  return { githubPRs, githubCommits, memberStats, jiraSprints, status, errors };
 }
 
 // ========== Cache API Endpoints ==========
@@ -186,15 +528,18 @@ async function syncAllData() {
 app.get('/api/data/cached', async (req, res) => {
   try {
     let github = await getCachedData('github_prs');
+    let commits = await getCachedData('github_commits');
+    let members = await getCachedData('member_stats');
     let jira = await getCachedData('jira_sprints');
 
     // If no cache exists, trigger a sync
-    if (!github || !jira) {
+    if (!github || !commits || !jira) {
       console.log('No cache found, triggering initial sync...');
       const result = await syncAllData();
       return res.json({
         githubPRs: result.githubPRs,
         jiraSprints: result.jiraSprints,
+        memberStats: result.memberStats,
         syncMeta: await getSyncMeta(),
       });
     }
@@ -203,6 +548,7 @@ app.get('/api/data/cached', async (req, res) => {
     res.json({
       githubPRs: github.data,
       jiraSprints: jira.data,
+      memberStats: members?.data || [],
       syncMeta,
     });
   } catch (error) {
@@ -219,6 +565,7 @@ app.post('/api/data/sync', async (req, res) => {
     res.json({
       githubPRs: result.githubPRs,
       jiraSprints: result.jiraSprints,
+      memberStats: result.memberStats,
       syncMeta,
     });
   } catch (error) {
@@ -241,19 +588,42 @@ app.get('/api/data/sync/stream', async (req, res) => {
 
   const errors = [];
   let githubPRs = [];
+  let githubCommits = [];
+  let memberStats = null;
   let jiraSprints = [];
 
-  // Step 1: GitHub
-  send('progress', { step: 'github', status: 'syncing', message: 'Fetching GitHub PRs...' });
+  // Step 1: GitHub PRs
+  send('progress', { step: 'github_prs', status: 'syncing', message: 'Fetching GitHub PRs...' });
   try {
     githubPRs = await fetchAndCacheGitHubData();
-    send('progress', { step: 'github', status: 'done', message: `GitHub: ${githubPRs.length} PRs synced` });
+    send('progress', { step: 'github_prs', status: 'done', message: `GitHub: ${githubPRs.length} PRs synced` });
   } catch (err) {
-    errors.push({ source: 'github', message: err.message });
-    send('progress', { step: 'github', status: 'error', message: `GitHub error: ${err.message}` });
+    errors.push({ source: 'github_prs', message: err.message });
+    send('progress', { step: 'github_prs', status: 'error', message: `GitHub PRs error: ${err.message}` });
   }
 
-  // Step 2: Jira
+  // Step 2: GitHub Commits
+  send('progress', { step: 'github_commits', status: 'syncing', message: 'Fetching GitHub commits...' });
+  try {
+    githubCommits = await fetchAndCacheGitHubCommits();
+    send('progress', { step: 'github_commits', status: 'done', message: `GitHub: ${githubCommits.length} commits synced` });
+  } catch (err) {
+    errors.push({ source: 'github_commits', message: err.message });
+    send('progress', { step: 'github_commits', status: 'error', message: `GitHub commits error: ${err.message}` });
+  }
+
+  // Step 3: Calculate Member Stats
+  send('progress', { step: 'member_stats', status: 'syncing', message: 'Calculating member statistics...' });
+  try {
+    memberStats = calculateMemberStats(githubCommits, githubPRs, new Date('2025-07-01'));
+    await setCachedData('member_stats', memberStats);
+    send('progress', { step: 'member_stats', status: 'done', message: `Calculated stats for ${memberStats.length} members` });
+  } catch (err) {
+    errors.push({ source: 'member_stats', message: err.message });
+    send('progress', { step: 'member_stats', status: 'error', message: `Member stats error: ${err.message}` });
+  }
+
+  // Step 4: Jira
   send('progress', { step: 'jira', status: 'syncing', message: 'Fetching Jira sprints...' });
   try {
     jiraSprints = await fetchAndCacheJiraData();
@@ -263,7 +633,7 @@ app.get('/api/data/sync/stream', async (req, res) => {
     send('progress', { step: 'jira', status: 'error', message: `Jira error: ${err.message}` });
   }
 
-  // Step 3: Save meta & complete
+  // Step 5: Save meta & complete
   const status = errors.length === 0 ? 'success' : 'partial';
   await updateSyncMeta(status, errors);
   const syncMeta = await getSyncMeta();
@@ -274,6 +644,7 @@ app.get('/api/data/sync/stream', async (req, res) => {
     syncMeta,
     githubPRs,
     jiraSprints,
+    memberStats,
   });
 
   res.end();
