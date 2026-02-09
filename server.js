@@ -216,6 +216,49 @@ function groupByRepo(commits) {
 }
 
 /**
+ * Helper: Group PRs by repo
+ */
+function groupPRsByRepo(prs) {
+  const repoMap = {};
+  prs.forEach((pr) => {
+    const repo = pr.repoName;
+    repoMap[repo] = (repoMap[repo] || 0) + 1;
+  });
+
+  return Object.entries(repoMap)
+    .map(([repo, count]) => ({ repo, prs: count }))
+    .sort((a, b) => b.prs - a.prs);
+}
+
+/**
+ * Helper: Combine commits and PRs by repo
+ */
+function combineRepoActivity(commits, prs) {
+  const repoMap = {};
+
+  // Add commits
+  commits.forEach((c) => {
+    const repo = c.repoName;
+    if (!repoMap[repo]) {
+      repoMap[repo] = { repo, commits: 0, prs: 0 };
+    }
+    repoMap[repo].commits++;
+  });
+
+  // Add PRs
+  prs.forEach((pr) => {
+    const repo = pr.repoName;
+    if (!repoMap[repo]) {
+      repoMap[repo] = { repo, commits: 0, prs: 0 };
+    }
+    repoMap[repo].prs++;
+  });
+
+  return Object.values(repoMap)
+    .sort((a, b) => (b.commits + b.prs) - (a.commits + a.prs));
+}
+
+/**
  * Helper: Analyze working pattern (GMT+7)
  */
 function analyzeWorkingPattern(commits) {
@@ -376,7 +419,7 @@ function calculateMemberStats(commits, prs, pivotDate) {
             : 0,
           avgMergeTimeHours: calculateAvgMergeTime(member.prs),
         },
-        repoActivity: groupByRepo(member.commits),
+        repoActivity: combineRepoActivity(member.commits, member.prs),
         workingPattern: analyzeWorkingPattern(member.commits),
       },
       heatmapData: heatmap,

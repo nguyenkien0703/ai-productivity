@@ -47,7 +47,7 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
       currentWeek.push({ date: new Date(d), count });
 
       // Track month labels (show label at start of each month)
-      if (d.getMonth() !== currentMonth && d.getDay() === 0) {
+      if (d.getMonth() !== currentMonth) {
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         monthLabelsArray.push({
           index: weekGrid.length,
@@ -86,6 +86,7 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
         padding: '24px',
         borderRadius: '12px',
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        width: '100%',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -124,22 +125,20 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
       {/* Month Labels */}
       <div
         style={{
-          display: 'flex',
-          gap: '3px',
+          position: 'relative',
           marginBottom: '4px',
           paddingLeft: '40px',
           fontSize: '12px',
           color: '#6b7280',
-          overflowX: 'auto',
+          height: '20px',
         }}
       >
         {monthLabels.map((label, idx) => (
           <div
             key={idx}
             style={{
-              position: 'relative',
-              left: `${label.index * 14}px`,
-              width: '30px',
+              position: 'absolute',
+              left: `${40 + label.index * 23}px`,
             }}
           >
             {label.label}
@@ -149,29 +148,30 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
 
       <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
         {/* Day Labels */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '10px', color: '#6b7280', paddingTop: '18px', flexShrink: 0 }}>
-          <div style={{ height: '11px' }}></div>
-          <div style={{ height: '11px', lineHeight: '11px' }}>Mon</div>
-          <div style={{ height: '11px' }}></div>
-          <div style={{ height: '11px', lineHeight: '11px' }}>Wed</div>
-          <div style={{ height: '11px' }}></div>
-          <div style={{ height: '11px', lineHeight: '11px' }}>Fri</div>
-          <div style={{ height: '11px' }}></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '10px', color: '#6b7280', paddingTop: '18px', flexShrink: 0 }}>
+          <div style={{ height: '17px' }}></div>
+          <div style={{ height: '17px', lineHeight: '17px' }}>Mon</div>
+          <div style={{ height: '17px' }}></div>
+          <div style={{ height: '17px', lineHeight: '17px' }}>Wed</div>
+          <div style={{ height: '17px' }}></div>
+          <div style={{ height: '17px', lineHeight: '17px' }}>Fri</div>
+          <div style={{ height: '17px' }}></div>
         </div>
 
         {/* Heatmap Grid */}
         <div
           style={{
             display: 'flex',
-            gap: '3px',
+            gap: '6px',
             overflowX: 'auto',
             paddingBottom: '16px',
             flex: 1,
             minWidth: 0,
+            justifyContent: 'flex-start',
           }}
         >
           {weeks.map((week, weekIndex) => (
-            <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0 }}>
             {week.map((day, dayIndex) => {
               const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
               const month = monthNames[day.date.getMonth()];
@@ -193,10 +193,10 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
                     }
                   }}
                   style={{
-                    width: '11px',
-                    height: '11px',
+                    width: '17px',
+                    height: '17px',
                     backgroundColor: getColor(day.count),
-                    borderRadius: '2px',
+                    borderRadius: '3px',
                     cursor: day.count > 0 ? 'pointer' : 'default',
                     transition: 'transform 0.1s',
                   }}
@@ -220,10 +220,10 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
           <div
             key={threshold}
             style={{
-              width: '11px',
-              height: '11px',
+              width: '17px',
+              height: '17px',
               backgroundColor: getColor(threshold),
-              borderRadius: '2px',
+              borderRadius: '3px',
             }}
           />
         ))}

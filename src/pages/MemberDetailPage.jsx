@@ -78,7 +78,7 @@ export default function MemberDetailPage() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', padding: '24px' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         {/* Header */}
         <button
           onClick={() => navigate('/')}
@@ -172,15 +172,20 @@ export default function MemberDetailPage() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '8px',
+                    padding: '12px',
                     backgroundColor: '#f9fafb',
                     borderRadius: '6px',
                   }}
                 >
-                  <span style={{ fontSize: '14px' }}>{repo.repo}</span>
-                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#3b82f6' }}>
-                    {repo.commits} commits
-                  </span>
+                  <span style={{ fontSize: '14px', fontWeight: 500 }}>{repo.repo}</span>
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '14px', color: '#6b7280' }}>
+                      <span style={{ fontWeight: 600, color: '#3b82f6' }}>{repo.commits}</span> commits
+                    </span>
+                    <span style={{ fontSize: '14px', color: '#6b7280' }}>
+                      <span style={{ fontWeight: 600, color: '#10b981' }}>{repo.prs}</span> PRs
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
