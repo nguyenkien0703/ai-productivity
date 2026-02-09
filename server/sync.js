@@ -4,14 +4,18 @@ import {
   upsertSprintsBatch,
   setSyncStatus,
   getSyncStatus,
-  getAllPRs,
 } from './db.js';
 import { calculateSprintMetrics } from '../shared/jira-calculations.js';
 
-const GITHUB_TOKEN = process.env.VITE_GITHUB_TOKEN;
-const JIRA_BASE_URL = process.env.VITE_JIRA_BASE_URL;
-const JIRA_API_TOKEN = process.env.VITE_JIRA_API_TOKEN;
-const JIRA_PROJECT_KEY = process.env.VITE_JIRA_PROJECT_KEY || 'AAP';
+// Read env vars lazily (after dotenv has loaded)
+function getEnv() {
+  return {
+    GITHUB_TOKEN: process.env.VITE_GITHUB_TOKEN,
+    JIRA_BASE_URL: process.env.VITE_JIRA_BASE_URL,
+    JIRA_API_TOKEN: process.env.VITE_JIRA_API_TOKEN,
+    JIRA_PROJECT_KEY: process.env.VITE_JIRA_PROJECT_KEY || 'AAP',
+  };
+}
 
 const REPOS = [
   { owner: 'DefikitTeam', repo: 'lumilink-be' },
@@ -23,6 +27,7 @@ let syncInProgress = { github: false, jira: false };
 // --- GitHub Sync ---
 
 async function fetchAllGitHubPRs(owner, repo) {
+  const { GITHUB_TOKEN } = getEnv();
   const prs = [];
   let page = 1;
   const perPage = 100;
@@ -45,23 +50,6 @@ async function fetchAllGitHubPRs(owner, repo) {
   return prs;
 }
 
-async function fetchPRReviews(owner, repo, prNumber) {
-  try {
-    const response = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/reviews`,
-      {
-        headers: {
-          Authorization: `token ${GITHUB_TOKEN}`,
-          Accept: 'application/vnd.github.v3+json',
-        },
-      }
-    );
-    return response.data;
-  } catch {
-    return [];
-  }
-}
-
 export async function syncGitHub() {
   if (syncInProgress.github) {
     console.log('   GitHub sync already in progress, skipping');
@@ -75,10 +63,6 @@ export async function syncGitHub() {
     setSyncStatus('github', 'in_progress');
     console.log('   Starting GitHub sync...');
 
-    // Get existing PRs to check which ones need review data
-    const existingPRs = getAllPRs();
-    const existingPRKeys = new Set(existingPRs.map((pr) => `${pr.repo_name}:${pr.number}`));
-
     const allPRs = [];
 
     for (const { owner, repo } of REPOS) {
@@ -86,21 +70,6 @@ export async function syncGitHub() {
       const prs = await fetchAllGitHubPRs(owner, repo);
 
       for (const pr of prs) {
-        const prKey = `${repoName}:${pr.number}`;
-        const existingPR = existingPRs.find((e) => e.repo_name === repoName && e.number === pr.number);
-
-        // Only fetch reviews for new PRs or PRs without review data
-        let firstReviewAt = existingPR?.first_review_at || null;
-        if (!existingPRKeys.has(prKey) || !firstReviewAt) {
-          const reviews = await fetchPRReviews(owner, repo, pr.number);
-          if (reviews.length > 0) {
-            const earliest = reviews.reduce((min, r) =>
-              new Date(r.submitted_at) < new Date(min.submitted_at) ? r : min
-            );
-            firstReviewAt = earliest.submitted_at;
-          }
-        }
-
         allPRs.push({
           id: pr.id,
           number: pr.number,
@@ -110,7 +79,7 @@ export async function syncGitHub() {
           user_login: pr.user?.login || '',
           created_at: pr.created_at,
           merged_at: pr.merged_at || null,
-          first_review_at: firstReviewAt,
+          first_review_at: null,
         });
       }
     }
@@ -134,6 +103,7 @@ export async function syncGitHub() {
 // --- Jira Sync ---
 
 async function jiraGet(path) {
+  const { JIRA_BASE_URL, JIRA_API_TOKEN } = getEnv();
   const response = await axios.get(`${JIRA_BASE_URL}/${path}`, {
     headers: {
       'Content-Type': 'application/json',
@@ -156,6 +126,7 @@ export async function syncJira() {
     setSyncStatus('jira', 'in_progress');
     console.log('   Starting Jira sync...');
 
+    const { JIRA_PROJECT_KEY } = getEnv();
     const boardsData = await jiraGet(`rest/agile/1.0/board?projectKeyOrId=${JIRA_PROJECT_KEY}`);
     const boards = boardsData.values || [];
 
@@ -210,16 +181,15 @@ export async function syncJira() {
 
 // --- Background Sync ---
 
-const CACHE_STALE_HOURS = parseInt(process.env.CACHE_STALE_HOURS ?? '6', 10);
-
 export function isStale(source) {
+  const staleHours = parseInt(process.env.CACHE_STALE_HOURS ?? '6', 10);
   const status = getSyncStatus(source);
   if (!status) return true;
 
   const lastSync = new Date(status.last_sync_at + 'Z');
   const now = new Date();
   const diffHours = (now - lastSync) / (1000 * 60 * 60);
-  return diffHours > CACHE_STALE_HOURS;
+  return diffHours > staleHours;
 }
 
 export function triggerBackgroundSync(source) {

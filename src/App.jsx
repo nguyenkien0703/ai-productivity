@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import MetricCard from './components/MetricCard';
 import PRChart from './components/PRChart';
 import SprintChart from './components/SprintChart';
@@ -25,24 +25,19 @@ function App() {
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
-  const processData = useCallback((data) => {
+  function processApiData(data) {
     const { pullRequests, sprints, syncStatus: status } = data;
 
     setSyncStatus(status);
 
-    // Process PR data
     if (pullRequests.length > 0) {
       setPrData(pullRequests);
-      const stats = calculatePRStats(pullRequests, PIVOT_DATE);
-      setPrStats(stats);
-      const monthly = getPRsByMonth(pullRequests);
-      setMonthlyData(monthly);
+      setPrStats(calculatePRStats(pullRequests, PIVOT_DATE));
+      setMonthlyData(getPRsByMonth(pullRequests));
     }
 
-    // Process sprint data
     if (sprints.length > 0) {
-      // Map DB column names to camelCase for compatibility with calculations
-      const mappedSprints = sprints.map((s) => ({
+      const mapped = sprints.map((s) => ({
         ...s,
         startDate: s.start_date,
         endDate: s.end_date,
@@ -52,135 +47,84 @@ function App() {
         completionRate: s.completion_rate,
         issueCount: s.issue_count,
       }));
-      setSprintData(mappedSprints);
-      const sStats = calculateSprintStats(mappedSprints, PIVOT_DATE);
-      setSprintStats(sStats);
+      setSprintData(mapped);
+      setSprintStats(calculateSprintStats(mapped, PIVOT_DATE));
     }
 
-    // Check if DB is empty (first run) - trigger sync
-    if (pullRequests.length === 0 && sprints.length === 0) {
-      const neverSynced = status.github.status === 'never' && status.jira.status === 'never';
-      if (neverSynced) {
-        handleRefresh();
+    // Return whether DB has data
+    return pullRequests.length > 0 || sprints.length > 0;
+  }
+
+  // Initial data load
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadData() {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await fetchDashboardData();
+        if (cancelled) return;
+
+        const hasData = processApiData(data);
+
+        // First run: DB empty & never synced → trigger one sync
+        if (!hasData && data.syncStatus.github.status === 'never') {
+          doSync();
+        }
+      } catch (err) {
+        if (!cancelled) setError('Backend not available. Start server with npm run dev');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
+
+    loadData();
+    return () => { cancelled = true; };
   }, []);
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      let data;
-      try {
-        data = await fetchDashboardData();
-        processData(data);
-      } catch (apiError) {
-        console.warn('Dashboard API error, falling back to mock data:', apiError.message);
-        // Use mock data for development
-        setPrStats({
-          prCountBefore: 45,
-          prCountAfter: 72,
-          mergedCountBefore: 42,
-          mergedCountAfter: 68,
-          avgMergeTimeBefore: 48,
-          avgMergeTimeAfter: 24,
-          avgReviewTimeBefore: 12,
-          avgReviewTimeAfter: 4,
-        });
-
-        setMonthlyData([
-          { month: '2025-01', prCount: 8, mergedCount: 7, avgMergeTime: 52 },
-          { month: '2025-02', prCount: 10, mergedCount: 9, avgMergeTime: 48 },
-          { month: '2025-03', prCount: 9, mergedCount: 8, avgMergeTime: 50 },
-          { month: '2025-04', prCount: 7, mergedCount: 7, avgMergeTime: 46 },
-          { month: '2025-05', prCount: 6, mergedCount: 6, avgMergeTime: 44 },
-          { month: '2025-06', prCount: 5, mergedCount: 5, avgMergeTime: 48 },
-          { month: '2025-07', prCount: 12, mergedCount: 11, avgMergeTime: 28 },
-          { month: '2025-08', prCount: 15, mergedCount: 14, avgMergeTime: 22 },
-          { month: '2025-09', prCount: 18, mergedCount: 17, avgMergeTime: 20 },
-          { month: '2025-10', prCount: 14, mergedCount: 14, avgMergeTime: 24 },
-          { month: '2025-11', prCount: 13, mergedCount: 12, avgMergeTime: 26 },
-        ]);
-
-        setSprintData([
-          { name: 'Sprint 1', completionRate: 75, completedPoints: 21, endDate: '2025-02-15' },
-          { name: 'Sprint 2', completionRate: 80, completedPoints: 24, endDate: '2025-03-01' },
-          { name: 'Sprint 3', completionRate: 72, completedPoints: 18, endDate: '2025-03-15' },
-          { name: 'Sprint 4', completionRate: 78, completedPoints: 23, endDate: '2025-04-01' },
-          { name: 'Sprint 5', completionRate: 70, completedPoints: 20, endDate: '2025-04-15' },
-          { name: 'Sprint 6', completionRate: 76, completedPoints: 22, endDate: '2025-05-01' },
-          { name: 'Sprint 7', completionRate: 88, completedPoints: 30, endDate: '2025-07-15' },
-          { name: 'Sprint 8', completionRate: 92, completedPoints: 33, endDate: '2025-08-01' },
-          { name: 'Sprint 9', completionRate: 95, completedPoints: 35, endDate: '2025-08-15' },
-          { name: 'Sprint 10', completionRate: 90, completedPoints: 32, endDate: '2025-09-01' },
-        ]);
-
-        setSprintStats({
-          sprintCountBefore: 6,
-          sprintCountAfter: 4,
-          avgCompletionBefore: 75.2,
-          avgCompletionAfter: 91.3,
-          avgPointsBefore: 21.3,
-          avgPointsAfter: 32.5,
-          totalPointsBefore: 128,
-          totalPointsAfter: 130,
-        });
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [processData]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Calculate summary when stats are available
+  // Calculate summary when stats change
   useEffect(() => {
     if (prStats && sprintStats) {
-      const summaryData = calculateSummary(prStats, sprintStats, HOURLY_RATE);
-      setSummary(summaryData);
+      setSummary(calculateSummary(prStats, sprintStats, HOURLY_RATE));
     }
   }, [prStats, sprintStats]);
 
-  const handleRefresh = useCallback(async () => {
+  // Sync + poll + reload
+  async function doSync() {
     setSyncing(true);
     try {
       await triggerSync();
+    } catch {
+      setSyncing(false);
+      return;
+    }
 
-      // Poll for completion
-      const pollInterval = setInterval(async () => {
-        try {
-          const status = await getSyncStatus();
-          const githubDone = !status.syncing.github;
-          const jiraDone = !status.syncing.jira;
-
-          if (githubDone && jiraDone) {
-            clearInterval(pollInterval);
-            setSyncing(false);
-            // Reload data after sync completes
-            await loadData();
-          }
-        } catch {
+    let attempts = 0;
+    const maxAttempts = 90; // 3 minutes max (90 * 2s)
+    const pollInterval = setInterval(async () => {
+      attempts++;
+      try {
+        const status = await getSyncStatus();
+        if ((!status.syncing.github && !status.syncing.jira) || attempts >= maxAttempts) {
           clearInterval(pollInterval);
           setSyncing(false);
+          // Reload fresh data from DB
+          try {
+            const data = await fetchDashboardData();
+            processApiData(data);
+          } catch { /* ignore */ }
         }
-      }, 2000);
-
-      // Safety timeout - stop polling after 5 minutes
-      setTimeout(() => {
+      } catch {
         clearInterval(pollInterval);
         setSyncing(false);
-        loadData();
-      }, 300000);
-    } catch (err) {
-      console.error('Sync error:', err.message);
-      setSyncing(false);
-    }
-  }, [loadData]);
+      }
+    }, 2000);
+  }
+
+  function handleRefresh() {
+    if (!syncing) doSync();
+  }
 
   if (loading) {
     return (
@@ -312,6 +256,118 @@ function App() {
             )}
           </button>
         </header>
+
+        {/* Syncing Banner - shown when syncing with existing data */}
+        {syncing && (prStats || sprintStats) && (
+          <div style={{
+            background: 'linear-gradient(135deg, #eff6ff, #eef2ff)',
+            border: '1px solid #bfdbfe',
+            borderRadius: '12px',
+            padding: '16px 24px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+          }}>
+            <div style={{
+              width: '20px',
+              height: '20px',
+              border: '3px solid #bfdbfe',
+              borderTopColor: '#3b82f6',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              flexShrink: 0,
+            }} />
+            <div>
+              <p style={{ margin: 0, fontWeight: 600, color: '#1e40af', fontSize: '14px' }}>
+                Refreshing data from GitHub & Jira...
+              </p>
+              <p style={{ margin: '4px 0 0', color: '#3b82f6', fontSize: '13px' }}>
+                Showing cached data while updating. This may take a minute.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Initial Sync Screen - shown when no data and syncing */}
+        {syncing && !prStats && !sprintStats && (
+          <div style={{
+            background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+            border: '1px solid #e2e8f0',
+            borderRadius: '16px',
+            padding: '60px 40px',
+            textAlign: 'center',
+            marginBottom: '24px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              border: '4px solid #e2e8f0',
+              borderTopColor: '#3b82f6',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              margin: '0 auto 24px',
+            }} />
+            <h2 style={{ margin: '0 0 12px', fontSize: '22px', fontWeight: 700, color: '#1e293b' }}>
+              Syncing your data for the first time
+            </h2>
+            <p style={{ margin: '0 0 32px', color: '#64748b', fontSize: '15px', maxWidth: '480px', marginInline: 'auto' }}>
+              Fetching pull requests from GitHub and sprint data from Jira.
+              This may take a couple of minutes on the first sync.
+            </p>
+
+            {/* Skeleton cards */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '16px',
+              maxWidth: '900px',
+              margin: '0 auto',
+            }}>
+              {['GitHub PRs', 'Jira Sprints', 'Merge Times', 'Story Points'].map((label) => (
+                <div key={label} style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  textAlign: 'left',
+                }}>
+                  <div style={{
+                    width: '60%',
+                    height: '12px',
+                    backgroundColor: '#e2e8f0',
+                    borderRadius: '6px',
+                    marginBottom: '16px',
+                    animation: 'pulse 2s ease-in-out infinite',
+                  }} />
+                  <div style={{
+                    width: '40%',
+                    height: '28px',
+                    backgroundColor: '#e2e8f0',
+                    borderRadius: '6px',
+                    marginBottom: '8px',
+                    animation: 'pulse 2s ease-in-out infinite',
+                    animationDelay: '0.2s',
+                  }} />
+                  <div style={{
+                    width: '80%',
+                    height: '10px',
+                    backgroundColor: '#f1f5f9',
+                    borderRadius: '6px',
+                    animation: 'pulse 2s ease-in-out infinite',
+                    animationDelay: '0.4s',
+                  }} />
+                  <p style={{ margin: '12px 0 0', color: '#94a3b8', fontSize: '12px' }}>{label}</p>
+                </div>
+              ))}
+            </div>
+
+            <style>
+              {`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}
+            </style>
+          </div>
+        )}
 
         {/* Summary Section */}
         {summary && (
