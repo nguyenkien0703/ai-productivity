@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(brew list:*)",
+      "Bash(docker:*)",
+      "Bash(timeout 8 node:*)"
+    ]
+  }
+}

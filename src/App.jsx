@@ -1,16 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import MetricCard from './components/MetricCard';
 import PRChart from './components/PRChart';
 import SprintChart from './components/SprintChart';
 import TimelineChart from './components/TimelineChart';
 import SummarySection from './components/SummarySection';
-import { fetchAllRepoPRs, fetchPRsWithReviews, calculatePRStats, getPRsByMonth } from './services/github';
-import { fetchAllSprintData, calculateSprintStats } from './services/jira';
+import { calculatePRStats, getPRsByMonth } from './services/github';
+import { calculateSprintStats } from './services/jira';
 import { calculateSummary } from './utils/calculations';
 
 // Pivot date: July 1, 2025 (join date)
 const PIVOT_DATE = new Date(import.meta.env.VITE_JOIN_DATE || '2025-07-01');
 const HOURLY_RATE = 10; // Default hourly rate for cost calculations
+
+function formatTimeAgo(dateString) {
+  if (!dateString) return 'Never';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -21,6 +35,28 @@ function App() {
   const [sprintData, setSprintData] = useState([]);
   const [sprintStats, setSprintStats] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  function processData(githubPRs, jiraSprints, syncMeta) {
+    // Process GitHub data
+    if (githubPRs && githubPRs.length > 0) {
+      setPrData(githubPRs);
+      setPrStats(calculatePRStats(githubPRs, PIVOT_DATE));
+      setMonthlyData(getPRsByMonth(githubPRs));
+    }
+
+    // Process Jira data
+    if (jiraSprints && jiraSprints.length > 0) {
+      setSprintData(jiraSprints);
+      setSprintStats(calculateSprintStats(jiraSprints, PIVOT_DATE));
+    }
+
+    if (syncMeta?.lastSyncAt) {
+      setLastSyncAt(syncMeta.lastSyncAt);
+    }
+  }
 
   useEffect(() => {
     async function loadData() {
@@ -28,87 +64,15 @@ function App() {
         setLoading(true);
         setError(null);
 
-        // Fetch GitHub data (without individual reviews to speed up loading)
-        let prs = [];
-        try {
-          prs = await fetchAllRepoPRs();
-          setPrData(prs);
-
-          const stats = calculatePRStats(prs, PIVOT_DATE);
-          setPrStats(stats);
-
-          const monthly = getPRsByMonth(prs);
-          setMonthlyData(monthly);
-        } catch (githubError) {
-          console.warn('GitHub API error:', githubError.message);
-          // Use mock data for development
-          const mockPrStats = {
-            prCountBefore: 45,
-            prCountAfter: 72,
-            mergedCountBefore: 42,
-            mergedCountAfter: 68,
-            avgMergeTimeBefore: 48,
-            avgMergeTimeAfter: 24,
-            avgReviewTimeBefore: 12,
-            avgReviewTimeAfter: 4,
-          };
-          setPrStats(mockPrStats);
-
-          // Mock monthly data
-          const mockMonthly = [
-            { month: '2025-01', prCount: 8, mergedCount: 7, avgMergeTime: 52 },
-            { month: '2025-02', prCount: 10, mergedCount: 9, avgMergeTime: 48 },
-            { month: '2025-03', prCount: 9, mergedCount: 8, avgMergeTime: 50 },
-            { month: '2025-04', prCount: 7, mergedCount: 7, avgMergeTime: 46 },
-            { month: '2025-05', prCount: 6, mergedCount: 6, avgMergeTime: 44 },
-            { month: '2025-06', prCount: 5, mergedCount: 5, avgMergeTime: 48 },
-            { month: '2025-07', prCount: 12, mergedCount: 11, avgMergeTime: 28 },
-            { month: '2025-08', prCount: 15, mergedCount: 14, avgMergeTime: 22 },
-            { month: '2025-09', prCount: 18, mergedCount: 17, avgMergeTime: 20 },
-            { month: '2025-10', prCount: 14, mergedCount: 14, avgMergeTime: 24 },
-            { month: '2025-11', prCount: 13, mergedCount: 12, avgMergeTime: 26 },
-          ];
-          setMonthlyData(mockMonthly);
+        const response = await fetch('/api/data/cached');
+        if (!response.ok) {
+          throw new Error(`Failed to load cached data: ${response.status}`);
         }
 
-        // Fetch Jira data
-        let sprints = [];
-        try {
-          sprints = await fetchAllSprintData();
-          setSprintData(sprints);
-
-          const sStats = calculateSprintStats(sprints, PIVOT_DATE);
-          setSprintStats(sStats);
-        } catch (jiraError) {
-          console.warn('Jira API error:', jiraError.message);
-          // Use mock data for development
-          const mockSprints = [
-            { name: 'Sprint 1', completionRate: 75, completedPoints: 21, endDate: '2025-02-15' },
-            { name: 'Sprint 2', completionRate: 80, completedPoints: 24, endDate: '2025-03-01' },
-            { name: 'Sprint 3', completionRate: 72, completedPoints: 18, endDate: '2025-03-15' },
-            { name: 'Sprint 4', completionRate: 78, completedPoints: 23, endDate: '2025-04-01' },
-            { name: 'Sprint 5', completionRate: 70, completedPoints: 20, endDate: '2025-04-15' },
-            { name: 'Sprint 6', completionRate: 76, completedPoints: 22, endDate: '2025-05-01' },
-            { name: 'Sprint 7', completionRate: 88, completedPoints: 30, endDate: '2025-07-15' },
-            { name: 'Sprint 8', completionRate: 92, completedPoints: 33, endDate: '2025-08-01' },
-            { name: 'Sprint 9', completionRate: 95, completedPoints: 35, endDate: '2025-08-15' },
-            { name: 'Sprint 10', completionRate: 90, completedPoints: 32, endDate: '2025-09-01' },
-          ];
-          setSprintData(mockSprints);
-
-          const mockSprintStats = {
-            sprintCountBefore: 6,
-            sprintCountAfter: 4,
-            avgCompletionBefore: 75.2,
-            avgCompletionAfter: 91.3,
-            avgPointsBefore: 21.3,
-            avgPointsAfter: 32.5,
-            totalPointsBefore: 128,
-            totalPointsAfter: 130,
-          };
-          setSprintStats(mockSprintStats);
-        }
+        const { githubPRs, jiraSprints, syncMeta } = await response.json();
+        processData(githubPRs, jiraSprints, syncMeta);
       } catch (err) {
+        console.error('Load error:', err.message);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -125,6 +89,64 @@ function App() {
       setSummary(summaryData);
     }
   }, [prStats, sprintStats]);
+
+  const toastIdRef = useRef(0);
+  function addToast(message, type = 'info', duration = 4000) {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    if (duration > 0) {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, duration);
+    }
+    return id;
+  }
+
+  function removeToast(id) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    const progressToastId = addToast('Starting sync...', 'loading', 0);
+
+    const es = new EventSource('/api/data/sync/stream');
+
+    es.addEventListener('progress', (e) => {
+      const data = JSON.parse(e.data);
+      setToasts((prev) =>
+        prev.map((t) =>
+          t.id === progressToastId ? { ...t, message: data.message } : t
+        )
+      );
+    });
+
+    es.addEventListener('complete', (e) => {
+      const data = JSON.parse(e.data);
+      es.close();
+      removeToast(progressToastId);
+
+      processData(data.githubPRs, data.jiraSprints, data.syncMeta);
+      setSyncing(false);
+
+      if (data.status === 'success') {
+        addToast(
+          `Sync completed! ${data.githubPRs.length} PRs, ${data.jiraSprints.length} sprints`,
+          'success'
+        );
+      } else {
+        const errMsgs = data.errors.map((e) => e.source).join(', ');
+        addToast(`Sync partially completed. Errors: ${errMsgs}`, 'warning', 6000);
+      }
+    });
+
+    es.addEventListener('error', () => {
+      es.close();
+      removeToast(progressToastId);
+      setSyncing(false);
+      addToast('Sync failed. Please try again.', 'error', 5000);
+    });
+  }
 
   if (loading) {
     return (
@@ -193,29 +215,161 @@ function App() {
         padding: '24px',
       }}
     >
+      {/* Toast Notifications */}
+      {toasts.length > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            maxWidth: '400px',
+          }}
+        >
+          {toasts.map((toast) => {
+            const colors = {
+              info: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
+              loading: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
+              success: { bg: '#f0fdf4', border: '#bbf7d0', text: '#166534' },
+              warning: { bg: '#fffbeb', border: '#fde68a', text: '#92400e' },
+              error: { bg: '#fef2f2', border: '#fecaca', text: '#991b1b' },
+            };
+            const c = colors[toast.type] || colors.info;
+            return (
+              <div
+                key={toast.id}
+                style={{
+                  padding: '12px 16px',
+                  backgroundColor: c.bg,
+                  border: `1px solid ${c.border}`,
+                  borderRadius: '8px',
+                  color: c.text,
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  animation: 'slideIn 0.3s ease-out',
+                }}
+              >
+                {toast.type === 'loading' && (
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid #bfdbfe',
+                      borderTopColor: '#3b82f6',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                {toast.type === 'success' && <span style={{ flexShrink: 0 }}>&#10003;</span>}
+                {toast.type === 'error' && <span style={{ flexShrink: 0 }}>&#10007;</span>}
+                {toast.type === 'warning' && <span style={{ flexShrink: 0 }}>&#9888;</span>}
+                <span style={{ flex: 1 }}>{toast.message}</span>
+                <button
+                  onClick={() => removeToast(toast.id)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: c.text,
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    padding: '0 2px',
+                    opacity: 0.6,
+                    flexShrink: 0,
+                  }}
+                >
+                  &#10005;
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <style>
+        {`@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}
+      </style>
+
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         {/* Header */}
-        <header style={{ marginBottom: '32px' }}>
-          <h1
-            style={{
-              margin: '0 0 8px',
-              fontSize: '28px',
-              fontWeight: 700,
-              color: '#111827',
-            }}
-          >
-            AI Productivity Metrics Dashboard
-          </h1>
-          <p style={{ margin: 0, color: '#6b7280' }}>
-            Comparing team productivity before and after{' '}
-            <strong style={{ color: '#3b82f6' }}>
-              {PIVOT_DATE.toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </strong>
-          </p>
+        <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1
+              style={{
+                margin: '0 0 8px',
+                fontSize: '28px',
+                fontWeight: 700,
+                color: '#111827',
+              }}
+            >
+              AI Productivity Metrics Dashboard
+            </h1>
+            <p style={{ margin: 0, color: '#6b7280' }}>
+              Comparing team productivity before and after{' '}
+              <strong style={{ color: '#3b82f6' }}>
+                {PIVOT_DATE.toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </strong>
+            </p>
+          </div>
+
+          {/* Sync Button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '13px', color: '#9ca3af' }}>
+              Last synced: {formatTimeAgo(lastSyncAt)}
+            </span>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                backgroundColor: syncing ? '#9ca3af' : '#3b82f6',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: syncing ? 'not-allowed' : 'pointer',
+                transition: 'background-color 0.2s',
+              }}
+            >
+              {syncing ? (
+                <>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: '14px',
+                      height: '14px',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                    }}
+                  />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: '16px' }}>&#x21bb;</span>
+                  Sync Now
+                </>
+              )}
+            </button>
+          </div>
         </header>
 
         {/* Summary Section */}

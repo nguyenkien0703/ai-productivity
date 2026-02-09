@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ai_dashboard_db
+    environment:
+      POSTGRES_DB: ai_dashboard
+      POSTGRES_USER: dashboard
+      POSTGRES_PASSWORD: dashboard123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - dashboard-net
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  dashboard-net:
+    name: dashboard-net
