@@ -519,10 +519,15 @@ function calculateMemberStats(commits, prs, pivotDate) {
     };
   });
 
-  const filteredMembers = members.filter((m) =>
-    !m.username.includes('bot') &&
-    !m.username.includes('[bot]')
-  );
+  const filteredMembers = members.filter((m) => {
+    const lowerUsername = m.username.toLowerCase();
+    return !lowerUsername.includes('bot') &&
+           !lowerUsername.includes('[bot]') &&
+           !lowerUsername.includes('copilot') &&
+           lowerUsername !== 'dependabot' &&
+           lowerUsername !== 'renovate' &&
+           lowerUsername !== 'github-actions';
+  });
 
   // Calculate team ranking and percentages
   const sortedByCommits = [...filteredMembers].sort((a, b) =>
