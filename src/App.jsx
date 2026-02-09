@@ -4,6 +4,7 @@ import PRChart from './components/PRChart';
 import SprintChart from './components/SprintChart';
 import TimelineChart from './components/TimelineChart';
 import SummarySection from './components/SummarySection';
+import MemberLeaderboard from './components/MemberLeaderboard';
 import { calculatePRStats, getPRsByMonth } from './services/github';
 import { calculateSprintStats } from './services/jira';
 import { calculateSummary } from './utils/calculations';
@@ -34,12 +35,13 @@ function App() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [sprintData, setSprintData] = useState([]);
   const [sprintStats, setSprintStats] = useState(null);
+  const [memberStats, setMemberStats] = useState(null);
   const [summary, setSummary] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [toasts, setToasts] = useState([]);
 
-  function processData(githubPRs, jiraSprints, syncMeta) {
+  function processData(githubPRs, jiraSprints, memberStatsData, syncMeta) {
     // Process GitHub data
     if (githubPRs && githubPRs.length > 0) {
       setPrData(githubPRs);
@@ -51,6 +53,11 @@ function App() {
     if (jiraSprints && jiraSprints.length > 0) {
       setSprintData(jiraSprints);
       setSprintStats(calculateSprintStats(jiraSprints, PIVOT_DATE));
+    }
+
+    // Process member stats
+    if (memberStatsData && memberStatsData.length > 0) {
+      setMemberStats(memberStatsData);
     }
 
     if (syncMeta?.lastSyncAt) {
@@ -69,8 +76,8 @@ function App() {
           throw new Error(`Failed to load cached data: ${response.status}`);
         }
 
-        const { githubPRs, jiraSprints, syncMeta } = await response.json();
-        processData(githubPRs, jiraSprints, syncMeta);
+        const { githubPRs, jiraSprints, memberStats, syncMeta } = await response.json();
+        processData(githubPRs, jiraSprints, memberStats, syncMeta);
       } catch (err) {
         console.error('Load error:', err.message);
         setError(err.message);
@@ -126,12 +133,12 @@ function App() {
       es.close();
       removeToast(progressToastId);
 
-      processData(data.githubPRs, data.jiraSprints, data.syncMeta);
+      processData(data.githubPRs, data.jiraSprints, data.memberStats, data.syncMeta);
       setSyncing(false);
 
       if (data.status === 'success') {
         addToast(
-          `Sync completed! ${data.githubPRs.length} PRs, ${data.jiraSprints.length} sprints`,
+          `Sync completed! ${data.githubPRs.length} PRs, ${data.jiraSprints.length} sprints, ${data.memberStats?.length || 0} members`,
           'success'
         );
       } else {
@@ -380,6 +387,11 @@ function App() {
             sprintStats={sprintStats}
             hourlyRate={HOURLY_RATE}
           />
+        )}
+
+        {/* Member Leaderboard */}
+        {memberStats && memberStats.length > 0 && (
+          <MemberLeaderboard members={memberStats} />
         )}
 
         {/* Metric Cards - Key AI Impact Metrics */}

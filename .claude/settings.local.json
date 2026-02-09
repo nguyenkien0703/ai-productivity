@@ -3,7 +3,11 @@
     "allow": [
       "Bash(brew list:*)",
       "Bash(docker:*)",
-      "Bash(timeout 8 node:*)"
+      "Bash(timeout 8 node:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(curl:*)"
     ]
   }
 }
