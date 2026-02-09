@@ -9,4 +9,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3004
+      - DATABASE_URL=postgresql://dashboard:dashboard123@ai_dashboard_db:5432/ai_dashboard
+    networks:
+      - dashboard-net
     restart: unless-stopped
+
+networks:
+  dashboard-net:
+    external: true
