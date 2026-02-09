@@ -179,6 +179,92 @@ function calculateStreak(commits) {
 }
 
 /**
+ * Helper: Calculate longest streak (GMT+7)
+ */
+function calculateLongestStreak(commits) {
+  if (commits.length === 0) return 0;
+
+  const dates = [...new Set(commits.map((c) =>
+    toGMT7DateString(c.commit.author.date)
+  ))].sort();
+
+  let longestStreak = 1;
+  let currentStreak = 1;
+
+  for (let i = 1; i < dates.length; i++) {
+    const prevDate = new Date(dates[i - 1]);
+    const currDate = new Date(dates[i]);
+    const diffDays = Math.floor((currDate - prevDate) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      currentStreak++;
+      longestStreak = Math.max(longestStreak, currentStreak);
+    } else {
+      currentStreak = 1;
+    }
+  }
+
+  return longestStreak;
+}
+
+/**
+ * Helper: Calculate commits per week average
+ */
+function calculateCommitsPerWeek(commits) {
+  if (commits.length === 0) return 0;
+
+  const dates = commits.map((c) => new Date(c.commit.author.date));
+  const oldestDate = new Date(Math.min(...dates));
+  const newestDate = new Date(Math.max(...dates));
+  const weeks = Math.ceil((newestDate - oldestDate) / (1000 * 60 * 60 * 24 * 7)) || 1;
+
+  return (commits.length / weeks).toFixed(1);
+}
+
+/**
+ * Helper: Find busiest week
+ */
+function findBusiestWeek(commits) {
+  if (commits.length === 0) return { week: 'N/A', commits: 0 };
+
+  const weekMap = {};
+
+  commits.forEach((c) => {
+    const date = new Date(c.commit.author.date);
+    // Get week start (Monday)
+    const dayOfWeek = date.getDay();
+    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const weekStart = new Date(date.setDate(diff));
+    const weekKey = toGMT7DateString(weekStart);
+
+    weekMap[weekKey] = (weekMap[weekKey] || 0) + 1;
+  });
+
+  const busiest = Object.entries(weekMap).reduce((max, [week, count]) =>
+    count > max.commits ? { week, commits: count } : max
+  , { week: 'N/A', commits: 0 });
+
+  return busiest;
+}
+
+/**
+ * Helper: Generate commits timeline data for chart
+ */
+function generateCommitsTimeline(commits) {
+  const timelineMap = {};
+
+  commits.forEach((c) => {
+    const dateStr = toGMT7DateString(c.commit.author.date);
+    timelineMap[dateStr] = (timelineMap[dateStr] || 0) + 1;
+  });
+
+  // Sort by date
+  return Object.entries(timelineMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, count }));
+}
+
+/**
  * Helper: Calculate commits per day
  */
 function calculateCommitsPerDay(commits) {
@@ -409,10 +495,15 @@ function calculateMemberStats(commits, prs, pivotDate) {
           after: commitsAfter.length,
           activeDays: countActiveDays(member.commits),
           currentStreak: calculateStreak(member.commits),
+          longestStreak: calculateLongestStreak(member.commits),
           commitsPerDay: calculateCommitsPerDay(commitsAfter),
+          commitsPerWeek: calculateCommitsPerWeek(commitsAfter),
+          busiestWeek: findBusiestWeek(member.commits),
         },
         prMetrics: {
           created: member.prs.length,
+          before: prsBefore.length,
+          after: prsAfter.length,
           merged: member.prs.filter((pr) => pr.merged_at).length,
           mergeRate: member.prs.length > 0
             ? member.prs.filter((pr) => pr.merged_at).length / member.prs.length
@@ -424,13 +515,38 @@ function calculateMemberStats(commits, prs, pivotDate) {
       },
       heatmapData: heatmap,
       commitsByDate: commitsByDate,
+      commitsTimeline: generateCommitsTimeline(member.commits),
     };
   });
 
-  return members.filter((m) =>
+  const filteredMembers = members.filter((m) =>
     !m.username.includes('bot') &&
     !m.username.includes('[bot]')
   );
+
+  // Calculate team ranking and percentages
+  const sortedByCommits = [...filteredMembers].sort((a, b) =>
+    b.metrics.commitFrequency.total - a.metrics.commitFrequency.total
+  );
+
+  const totalTeamCommits = filteredMembers.reduce((sum, m) =>
+    sum + m.metrics.commitFrequency.total, 0
+  );
+
+  filteredMembers.forEach((member) => {
+    const rank = sortedByCommits.findIndex(m => m.username === member.username) + 1;
+    const percentage = totalTeamCommits > 0
+      ? ((member.metrics.commitFrequency.total / totalTeamCommits) * 100).toFixed(1)
+      : 0;
+
+    member.teamContext = {
+      rank,
+      totalMembers: filteredMembers.length,
+      percentageOfTeam: percentage,
+    };
+  });
+
+  return filteredMembers;
 }
 
 /**

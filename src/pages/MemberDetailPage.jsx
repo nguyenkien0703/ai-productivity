@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MemberContributionHeatmap from '../components/MemberContributionHeatmap';
+import CommitsTrendChart from '../components/CommitsTrendChart';
 
 export default function MemberDetailPage() {
   const { username } = useParams();
@@ -125,7 +126,7 @@ export default function MemberDetailPage() {
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
             gap: '16px',
-            marginBottom: '24px',
+            marginBottom: '16px',
           }}
         >
           <MetricCard
@@ -146,8 +147,80 @@ export default function MemberDetailPage() {
           />
         </div>
 
+        {/* New Metrics Row */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '16px',
+            marginBottom: '24px',
+          }}
+        >
+          <MetricCard
+            title="Longest Streak"
+            value={`${memberData.metrics.commitFrequency.longestStreak} days`}
+            icon="🔥"
+          />
+          <MetricCard
+            title="Commits/Week"
+            value={memberData.metrics.commitFrequency.commitsPerWeek}
+            icon="📊"
+          />
+          <MetricCard
+            title="Busiest Week"
+            value={`${memberData.metrics.commitFrequency.busiestWeek.commits} commits`}
+            subtitle={new Date(memberData.metrics.commitFrequency.busiestWeek.week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            icon="⚡"
+          />
+          <MetricCard
+            title="Team Rank"
+            value={`#${memberData.teamContext.rank} / ${memberData.teamContext.totalMembers}`}
+            subtitle={`${memberData.teamContext.percentageOfTeam}% of team`}
+            icon="🏆"
+          />
+        </div>
+
         {/* Contribution Heatmap */}
         <MemberContributionHeatmap heatmapData={memberData.heatmapData} memberData={memberData} />
+
+        {/* Commits Trend Chart */}
+        <div
+          style={{
+            marginTop: '24px',
+            backgroundColor: '#fff',
+            padding: '24px',
+            borderRadius: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          }}
+        >
+          <h3 style={{ margin: '0 0 16px' }}>Commits Trend (Weekly)</h3>
+          <CommitsTrendChart timelineData={memberData.commitsTimeline} />
+        </div>
+
+        {/* Before/After Comparison */}
+        <div
+          style={{
+            marginTop: '24px',
+            backgroundColor: '#fff',
+            padding: '24px',
+            borderRadius: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          }}
+        >
+          <h3 style={{ margin: '0 0 16px' }}>Performance Comparison (Before/After Jul 2025)</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+            <ComparisonCard
+              title="Commits"
+              before={memberData.metrics.commitFrequency.before}
+              after={memberData.metrics.commitFrequency.after}
+            />
+            <ComparisonCard
+              title="Pull Requests"
+              before={memberData.metrics.prMetrics.before}
+              after={memberData.metrics.prMetrics.after}
+            />
+          </div>
+        </div>
 
         {/* Repository Activity */}
         <div
@@ -278,7 +351,7 @@ export default function MemberDetailPage() {
   );
 }
 
-function MetricCard({ title, value }) {
+function MetricCard({ title, value, subtitle, icon }) {
   return (
     <div
       style={{
@@ -288,8 +361,57 @@ function MetricCard({ title, value }) {
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
       }}
     >
-      <p style={{ margin: '0 0 8px', color: '#6b7280', fontSize: '14px' }}>{title}</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>{title}</p>
+        {icon && <span style={{ fontSize: '20px' }}>{icon}</span>}
+      </div>
       <p style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }}>{value}</p>
+      {subtitle && (
+        <p style={{ margin: '4px 0 0', color: '#9ca3af', fontSize: '12px' }}>{subtitle}</p>
+      )}
+    </div>
+  );
+}
+
+function ComparisonCard({ title, before, after }) {
+  const change = after - before;
+  const percentChange = before > 0 ? ((change / before) * 100).toFixed(1) : (after > 0 ? 100 : 0);
+  const isPositive = change > 0;
+  const isNeutral = change === 0;
+
+  return (
+    <div
+      style={{
+        padding: '16px',
+        backgroundColor: '#f9fafb',
+        borderRadius: '8px',
+        border: '1px solid #e5e7eb',
+      }}
+    >
+      <h4 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>{title}</h4>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280' }}>Before</p>
+          <p style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>{before}</p>
+        </div>
+        <div style={{ fontSize: '24px', color: '#9ca3af' }}>→</div>
+        <div>
+          <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280' }}>After</p>
+          <p style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>{after}</p>
+        </div>
+        <div
+          style={{
+            padding: '8px 12px',
+            borderRadius: '6px',
+            backgroundColor: isNeutral ? '#f3f4f6' : (isPositive ? '#dcfce7' : '#fee2e2'),
+            color: isNeutral ? '#6b7280' : (isPositive ? '#16a34a' : '#dc2626'),
+            fontWeight: 600,
+            fontSize: '14px',
+          }}
+        >
+          {isPositive ? '↑' : (isNeutral ? '=' : '↓')} {Math.abs(percentChange)}%
+        </div>
+      </div>
     </div>
   );
 }
