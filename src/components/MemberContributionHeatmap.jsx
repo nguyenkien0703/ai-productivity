@@ -112,7 +112,7 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
       </div>
 
       {/* Year Summary */}
-      <div style={{ marginBottom: '16px', fontSize: '14px', color: '#6b7280' }}>
+      <div style={{ marginBottom: '4px', fontSize: '14px', color: '#6b7280' }}>
         {(() => {
           const yearCommits = Object.entries(heatmapData).filter(([dateStr]) => {
             const year = new Date(dateStr).getFullYear();
@@ -120,6 +120,11 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
           }).reduce((sum, [, count]) => sum + count, 0);
           return `${yearCommits} contributions in ${selectedYear}`;
         })()}
+      </div>
+
+      {/* Instruction */}
+      <div style={{ marginBottom: '16px', fontSize: '13px', color: '#9ca3af', fontStyle: 'italic' }}>
+        💡 Click on any green square to view commit details
       </div>
 
       {/* Month Labels */}
@@ -198,13 +203,22 @@ export default function MemberContributionHeatmap({ heatmapData, memberData }) {
                     backgroundColor: getColor(day.count),
                     borderRadius: '3px',
                     cursor: day.count > 0 ? 'pointer' : 'default',
-                    transition: 'transform 0.1s',
+                    transition: 'all 0.2s ease',
+                    border: '2px solid transparent',
                   }}
                   onMouseEnter={(e) => {
-                    if (day.count > 0) e.currentTarget.style.transform = 'scale(1.3)';
+                    if (day.count > 0) {
+                      e.currentTarget.style.transform = 'scale(1.2)';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
+                      e.currentTarget.style.borderColor = '#3b82f6';
+                      e.currentTarget.style.zIndex = '10';
+                    }
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'transparent';
+                    e.currentTarget.style.zIndex = '1';
                   }}
                 />
               );

@@ -165,29 +165,58 @@ export default function MemberDetailPage() {
           >
             <h3 style={{ margin: '0 0 16px' }}>Repository Activity</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {memberData.metrics.repoActivity.map((repo) => (
-                <div
-                  key={repo.repo}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px',
-                    backgroundColor: '#f9fafb',
-                    borderRadius: '6px',
-                  }}
-                >
-                  <span style={{ fontSize: '14px', fontWeight: 500 }}>{repo.repo}</span>
-                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '14px', color: '#6b7280' }}>
-                      <span style={{ fontWeight: 600, color: '#3b82f6' }}>{repo.commits}</span> commits
-                    </span>
-                    <span style={{ fontSize: '14px', color: '#6b7280' }}>
-                      <span style={{ fontWeight: 600, color: '#10b981' }}>{repo.prs}</span> PRs
-                    </span>
+              {memberData.metrics.repoActivity.map((repo) => {
+                const commitsUrl = `https://github.com/${repo.repo}/commits?author=${memberData.username}`;
+                const prsUrl = `https://github.com/${repo.repo}/pulls?q=is:pr+author:${memberData.username}`;
+
+                return (
+                  <div
+                    key={repo.repo}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px',
+                      backgroundColor: '#f9fafb',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <span style={{ fontSize: '14px', fontWeight: 500 }}>{repo.repo}</span>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                      <a
+                        href={commitsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: '14px',
+                          color: '#6b7280',
+                          textDecoration: 'none',
+                          transition: 'color 0.2s',
+                        }}
+                        onMouseEnter={(e) => (e.target.style.color = '#3b82f6')}
+                        onMouseLeave={(e) => (e.target.style.color = '#6b7280')}
+                      >
+                        <span style={{ fontWeight: 600, color: '#3b82f6' }}>{repo.commits}</span> commits
+                      </a>
+                      <a
+                        href={prsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: '14px',
+                          color: '#6b7280',
+                          textDecoration: 'none',
+                          transition: 'color 0.2s',
+                        }}
+                        onMouseEnter={(e) => (e.target.style.color = '#10b981')}
+                        onMouseLeave={(e) => (e.target.style.color = '#6b7280')}
+                      >
+                        <span style={{ fontWeight: 600, color: '#10b981' }}>{repo.prs}</span> PRs
+                      </a>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
